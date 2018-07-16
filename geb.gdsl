@@ -1,0 +1,180 @@
+import com.intellij.lang.jvm.JvmParameter
+import com.intellij.psi.*
+import com.intellij.psi.util.*
+
+synchronized void syncPrint(String s) {
+  println s
+}
+
+synchronized def getPreviousElement(place) {
+    if (place.prevSibling != null) return getLastLeaf(place.prevSibling)
+    if (place.parent == null) return null
+    return place.parent
+}
+
+synchronized def getLastLeaf(place) {
+    //if (!place.lastChild) return null;
+    def lastChild = place
+    while (lastChild.lastChild) lastChild = lastChild.lastChild
+    lastChild
+}
+
+synchronized PsiType getPreviousPage(place) {
+
+    def prev = place
+    for (int i = 0; i < 200; i++) {
+        prev = getPreviousElement(prev)
+        if (!prev) return null;
+
+        PsiReference reference = prev.getReference();
+        if (reference != null) {
+            PsiElement target = reference.resolve();
+//            if (target instanceof PsiClass) {
+//                println "Found reference to a Class"
+//            }
+            if (target instanceof PsiMethod) {
+
+                //println "Found reference to a Method"
+                PsiMethod method = target
+                if (method.containingClass?.qualName == "geb.Browser"
+                        && ["to", "at", "page"].contains(method.name)) {
+                    PsiType  pageType = prev.parent.nominalType
+                    println "Found Method to/at/page. pageType " + pageType
+                    return pageType
+                }
+
+
+            }
+        }
+    }
+}
+
+synchronized void printClass(Class cls) {
+    println ""
+    println "class name: " + cls.canonicalName
+    println ""
+    println "superclasses: "
+    def cur = cls
+    while (cur = cur.superclass) println cur.canonicalName
+
+    println ""
+    println "interfaces: "
+    cls.interfaces.each {
+        cur = it
+        while (cur = cur.superclass) println cur.canonicalName
+    }
+    println ""
+
+}
+
+synchronized Collection<Tuple2<String, String>> getGebPageContent(PsiClass pageCls) {
+    PsiField content = pageCls.findFieldByName("content", true)
+    //println "content field: " + content
+    if (!content) return []
+
+    Collection<Tuple2<String, String>> res = []
+    content.initializer.navigationElement.children.each {
+
+        //println "child " + it.class
+        if (it.class.simpleName == "GrMethodCallExpressionImpl" || it instanceof PsiMethodCallExpression) {
+            //it.methodExpression.text
+            String contentName = it.invokedExpression.text
+            String contentType = it.closureArguments[0].returnType.className
+            res.add(new Tuple2<>(contentName, contentType))
+        }
+    }
+
+    res
+}
+
+synchronized String getParameterType(JvmParameter parameter) {
+    PsiElement elt = parameter.sourceElement.lastChild.prevSibling.prevSibling
+    return elt.type.canonicalText
+}
+
+def ctx31 = context()
+
+synchronized def resolveFakeMethodReference(PsiElement place, PsiClass pageCls) {
+    if (place.text.contains("testMethod")) {
+        println ""
+        println "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+        println "Found manualsMenu"
+        println place.text
+        println place.reference
+        println place.reference.class
+        println place.reference.class.declaredFields
+        println place.reference.myFakeReference?.value
+        println place.reference.myFakeGetterReference?.value
+
+
+        String methodName = "testMethod"
+        PsiMethod[] methods = pageCls.findMethodsByName(methodName, false)
+        if (methods.length) {
+            println "bind to method: " + methods[0]
+            //place.reference.bindToElement(methods[0])
+
+        }
+        PsiElement target = place.reference.resolve()
+        println target
+        println ""
+    }
+}
+
+contributor(ctx31) {
+
+    StringBuilder sb = new StringBuilder();
+    sb.append("\n").append("-------------------------").append("\n")
+    sb.append("psiType: " + psiType).append("\n")
+    sb.append("psiClass: " + psiClass?.qualName).append("\n")
+    sb.append("place: " + place).append("\n")
+    sb.append(place.text).append("\n")
+    sb.append(place.parent.text).append("\n")
+    sb.append("binding: " + binding).append("\n")
+    sb.append(delegate).append("\n")
+    sb.append("==========================").append("\n").append("\n")
+
+
+
+    // XXX passing superclass as ctype to context did not work
+    if (psiClass?.superClass?.qualName != "geb.junit4.GebReportingTest") {
+        return
+    }
+
+    PsiType pg = getPreviousPage(place)
+    //println("Found page type: " + pg)
+    if (pg) {
+
+        PsiClass pageCls = PsiUtil.resolveClassInType(pg)
+        //println("Found page class: " + pageCls)
+
+        if (!pageCls) return;
+        //println("Found page class: " + pageCls.qualName)
+
+        PsiMethod[] methods = pageCls.getMethods().findAll { it.toString() == "Method"}
+        PsiField[] fields = pageCls.getFields()
+
+
+        println "Found page methods: " + methods.collect { it.name }
+
+        methods.each {
+
+            println "Adding method : " + it.returnType.canonicalText + " " +  it.name + "(" +
+                it.parameters.collect { getParameterType(it) + " " + it.name  }.join(",") + ")"
+            method name: it.name,
+                   type: it.returnType.canonicalText,
+                   params: it.parameters.collectEntries {[it.name, getParameterType(it)]},
+                   doc: "DocTest", docUrl: "http://google.com", isStatic: false
+        }
+
+        getGebPageContent(pageCls).each {
+            println "Adding property : " +  it.second + " " + it.first
+            property name: it.first, type: it.second,
+                    doc: "DocTest", docUrl: "http://google.com", isStatic: false
+        }
+
+        syncPrint sb.toString()
+
+
+        resolveFakeMethodReference(place, pageCls)
+    }
+}
