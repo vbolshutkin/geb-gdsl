@@ -1,10 +1,8 @@
 import com.intellij.lang.jvm.JvmParameter
 import com.intellij.psi.*
 import com.intellij.psi.util.*
-
-synchronized void syncPrint(String s) {
-  println s
-}
+import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.path.GrMethodCallExpressionImpl
+import org.jetbrains.plugins.groovy.lang.psi.util.GroovyPropertyUtils
 
 synchronized def getPreviousElement(place) {
     if (place.prevSibling != null) return getLastLeaf(place.prevSibling)
@@ -13,7 +11,6 @@ synchronized def getPreviousElement(place) {
 }
 
 synchronized def getLastLeaf(place) {
-    //if (!place.lastChild) return null;
     def lastChild = place
     while (lastChild.lastChild) lastChild = lastChild.lastChild
     lastChild
@@ -49,42 +46,11 @@ synchronized PsiType getPreviousPage(place) {
     }
 }
 
-synchronized void printClass(Class cls) {
-    println ""
-    println "class name: " + cls.canonicalName
-    println ""
-    println "superclasses: "
-    def cur = cls
-    while (cur = cur.superclass) println cur.canonicalName
-
-    println ""
-    println "interfaces: "
-    cls.interfaces.each {
-        cur = it
-        while (cur = cur.superclass) println cur.canonicalName
-    }
-    println ""
-
-}
-
-synchronized Collection<Tuple2<String, String>> getGebPageContent(PsiClass pageCls) {
+synchronized Collection<PsiElement> getGebPageContent(PsiClass pageCls) {
     PsiField content = pageCls.findFieldByName("content", true)
-    //println "content field: " + content
     if (!content) return []
 
-    Collection<Tuple2<String, String>> res = []
-    content.initializer.navigationElement.children.each {
-
-        //println "child " + it.class
-        if (it.class.simpleName == "GrMethodCallExpressionImpl" || it instanceof PsiMethodCallExpression) {
-            //it.methodExpression.text
-            String contentName = it.invokedExpression.text
-            String contentType = it.closureArguments[0].returnType.className
-            res.add(new Tuple2<>(contentName, contentType))
-        }
-    }
-
-    res
+    content.initializer.navigationElement.children
 }
 
 synchronized String getParameterType(JvmParameter parameter) {
@@ -92,36 +58,9 @@ synchronized String getParameterType(JvmParameter parameter) {
     return elt.type.canonicalText
 }
 
-def ctx31 = context()
+contributor(context()) {
 
-synchronized def resolveFakeMethodReference(PsiElement place, PsiClass pageCls) {
-    if (place.text.contains("testMethod")) {
-        println ""
-        println "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-        println "Found manualsMenu"
-        println place.text
-        println place.reference
-        println place.reference.class
-        println place.reference.class.declaredFields
-        println place.reference.myFakeReference?.value
-        println place.reference.myFakeGetterReference?.value
-
-
-        String methodName = "testMethod"
-        PsiMethod[] methods = pageCls.findMethodsByName(methodName, false)
-        if (methods.length) {
-            println "bind to method: " + methods[0]
-            //place.reference.bindToElement(methods[0])
-
-        }
-        PsiElement target = place.reference.resolve()
-        println target
-        println ""
-    }
-}
-
-contributor(ctx31) {
-
+    // XXX without this sb block the whole contributor stops working
     StringBuilder sb = new StringBuilder();
     sb.append("\n").append("-------------------------").append("\n")
     sb.append("psiType: " + psiType).append("\n")
@@ -133,48 +72,53 @@ contributor(ctx31) {
     sb.append(delegate).append("\n")
     sb.append("==========================").append("\n").append("\n")
 
-
-
     // XXX passing superclass as ctype to context did not work
     if (psiClass?.superClass?.qualName != "geb.junit4.GebReportingTest") {
         return
     }
 
+    println "Found test"
+
     PsiType pg = getPreviousPage(place)
     //println("Found page type: " + pg)
     if (pg) {
-
         PsiClass pageCls = PsiUtil.resolveClassInType(pg)
-        //println("Found page class: " + pageCls)
-
         if (!pageCls) return;
-        //println("Found page class: " + pageCls.qualName)
+        println("Found page class: " + pageCls.qualName)
 
         PsiMethod[] methods = pageCls.getMethods().findAll { it.toString() == "Method"}
         PsiField[] fields = pageCls.getFields()
 
-
-        println "Found page methods: " + methods.collect { it.name }
-
         methods.each {
 
             println "Adding method : " + it.returnType.canonicalText + " " +  it.name + "(" +
-                it.parameters.collect { getParameterType(it) + " " + it.name  }.join(",") + ")"
+                    it.parameters.collect { getParameterType(it) + " " + it.name  }.join(",") + ")"
             method name: it.name,
-                   type: it.returnType.canonicalText,
-                   params: it.parameters.collectEntries {[it.name, getParameterType(it)]},
-                   doc: "DocTest", docUrl: "http://google.com", isStatic: false
-        }
-
-        getGebPageContent(pageCls).each {
-            println "Adding property : " +  it.second + " " + it.first
-            property name: it.first, type: it.second,
+                    type: it.returnType.canonicalText,
+                    params: it.parameters.collectEntries {[it.name, getParameterType(it)]},
+                    containingClass: pageCls.qualName,
+                    bindsTo: it,
                     doc: "DocTest", docUrl: "http://google.com", isStatic: false
         }
 
-        syncPrint sb.toString()
+        getGebPageContent(pageCls).each {
+
+            // XXX (it instanceof PsiMethodCallExpression) did not work
+            if (!(it instanceof GrMethodCallExpressionImpl)) {
+                // syntax error in Geb page or something changed in PSI model
+                return
+            }
+
+            String contentName = it.invokedExpression.text
+            String contentType = it.closureArguments[0].returnType.className
 
 
-        resolveFakeMethodReference(place, pageCls)
+            println "Adding read-only property: " +  contentType + " " + contentName
+            method name: GroovyPropertyUtils.getGetterNameNonBoolean(contentName),
+                    type: contentType,
+                    containingClass: pageCls.qualName,
+                    bindsTo: it,
+                    doc: "DocTest", docUrl: "http://google.com", isStatic: false
+        }
     }
 }
