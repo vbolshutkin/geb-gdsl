@@ -1,3 +1,11 @@
+/*
+ * Originally implemented by Vladimir Bolshutkin
+ * https://github.com/vbolshutkin/geb-gdsl
+ *
+ * Distributed under Apache 2.0 license, which can be found in LICENSE file
+ *
+ * Usage: just add this file to Intellij IDEA classpath for your Geb project
+ */
 import com.intellij.lang.jvm.JvmParameter
 import com.intellij.psi.*
 import com.intellij.psi.util.*
