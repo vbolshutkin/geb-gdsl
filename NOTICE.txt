@@ -1,0 +1,8 @@
+This software uses libraries from 
+
+IntelliJ IDEA Community Edition
+Copyright (C) JetBrains s.r.o.
+https://www.jetbrains.com/idea/
+
+Geb - Very Groovy Browser Automation
+http://www.gebish.org

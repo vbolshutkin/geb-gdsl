@@ -23,12 +23,9 @@ synchronized PsiType getPreviousPage(place) {
         prev = getPreviousElement(prev)
         if (!prev) return null;
 
-        PsiReference reference = prev.getReference();
+        PsiReference reference = prev.getReference()
         if (reference != null) {
-            PsiElement target = reference.resolve();
-//            if (target instanceof PsiClass) {
-//                println "Found reference to a Class"
-//            }
+            PsiElement target = reference.resolve()
             if (target instanceof PsiMethod) {
 
                 //println "Found reference to a Method"
@@ -61,16 +58,7 @@ synchronized String getParameterType(JvmParameter parameter) {
 contributor(context()) {
 
     // XXX without this sb block the whole contributor stops working
-    StringBuilder sb = new StringBuilder();
-    sb.append("\n").append("-------------------------").append("\n")
-    sb.append("psiType: " + psiType).append("\n")
-    sb.append("psiClass: " + psiClass?.qualName).append("\n")
-    sb.append("place: " + place).append("\n")
-    sb.append(place.text).append("\n")
-    sb.append(place.parent.text).append("\n")
-    sb.append("binding: " + binding).append("\n")
-    sb.append(delegate).append("\n")
-    sb.append("==========================").append("\n").append("\n")
+    println psiType
 
     // XXX passing superclass as ctype to context did not work
     if (psiClass?.superClass?.qualName != "geb.junit4.GebReportingTest") {
