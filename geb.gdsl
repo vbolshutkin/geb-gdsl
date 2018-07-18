@@ -6,9 +6,11 @@
  *
  * Usage: just add this file to Intellij IDEA classpath for your Geb project
  */
-import com.intellij.lang.jvm.JvmParameter
 import com.intellij.psi.*
+import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.*
+import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrCommandArgumentList
+import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.GrReferenceExpressionImpl
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.path.GrMethodCallExpressionImpl
 import org.jetbrains.plugins.groovy.lang.psi.util.GroovyPropertyUtils
 
@@ -58,25 +60,93 @@ synchronized Collection<PsiElement> getGebPageContent(PsiClass pageCls) {
     content.initializer.navigationElement.children
 }
 
-synchronized String getParameterType(JvmParameter parameter) {
-    PsiElement elt = parameter.sourceElement.lastChild.prevSibling.prevSibling
-    return elt.type.canonicalText
+synchronized String substituteTypeNames(String fqn, Map<String, String> substituteTypes) {
+    substituteTypes.keySet().each {
+        if (fqn.contains(it)) fqn = fqn.replaceAll(it, substituteTypes.get(it))
+    }
+    return fqn
+}
+
+synchronized Map getFakeMethodParams(PsiMethod it, PsiClass cls, String[] argumentTypes) {
+
+    Map<String, String> substituteTypes = [:]
+
+    if (it.typeParameterList?.typeParameters) {
+        // XXX hardcode for single type-parameter as in "T page(Class<T> cls)"
+        substituteTypes.put(it.typeParameterList.typeParameters[0].name, argumentTypes[0])
+    }
+
+    println "Adding method : " + substituteTypeNames(it.returnType.canonicalText, substituteTypes) + " " +  it.name + "(" +
+            it.parameterList.parameters.collect {
+                substituteTypeNames(it.type.canonicalText, substituteTypes) + " " + it.name  }.join(",") + ")"
+    return [
+            name: it.name,
+            type: substituteTypeNames(it.returnType.canonicalText, substituteTypes),
+            params: it.parameterList.parameters.collectEntries {[it.name, substituteTypeNames(it.type.canonicalText, substituteTypes)]},
+            containingClass: cls.qualifiedName,
+            bindsTo: it,
+            doc: "DocTest", docUrl: "http://google.com", isStatic: false
+        ]
 }
 
 contributor(context()) {
 
-    // XXX without this sb block the whole contributor stops working
-    println psiType
+    // XXX without this line the whole contributor stops working
+    String type = psiType
+
+    def project = place.manager.project
+    def jpf = JavaPsiFacade.getInstance(project)
+    def browserClass =  jpf.findClass("geb.Browser", GlobalSearchScope.allScope(project))
+
+    boolean contribute = false
+
+    if (psiType.toString().contains("Closure")) {
+
+        def methodCall = PsiTreeUtil.getParentOfType(place, GrMethodCallExpressionImpl)
+        while (methodCall && methodCall.invokedExpression?.text != "withFrame") {
+            methodCall = PsiTreeUtil.getParentOfType(methodCall, GrMethodCallExpressionImpl)
+        }
+
+        if (methodCall && "withFrame" == methodCall.invokedExpression.text) {
+            println "Found withFrame block for " + place.text
+            contribute = true
+
+            if (place instanceof GrReferenceExpressionImpl) {
+                println place.referenceName
+                // XXX hardcode: look for to/at/page methods that do have command arguments
+                def arguments =  PsiTreeUtil.getNextSiblingOfType(place, GrCommandArgumentList)
+                def resolvedType = arguments?.firstChild?.reference?.resolve()
+                if (resolvedType instanceof PsiClass) {
+                    String typeName = resolvedType.qualifiedName
+                    println typeName + " " + place.referenceName
+                    def methods = browserClass.findMethodsByName(place.referenceName, false)
+
+                    methods.each {
+                        String[] args = [typeName]
+                        method getFakeMethodParams(it, browserClass, args)
+                    }
+                }
+            }
+
+        }
+    }
 
     // XXX passing superclass as ctype to context did not work
-    if (psiClass?.superClass?.qualName != "geb.junit4.GebReportingTest") {
+    if (psiClass?.superClass?.qualName == "geb.junit4.GebReportingTest" || place.text.contains("confirmDelete")) {
+        //println "Found test"
+        contribute = true
+    }
+    //contribute = false
+    if (!contribute) {
         return
     }
 
-    println "Found test"
-
+    // contribute Page members after switching (using to/at/page)
     PsiType pg = getPreviousPage(place)
-    //println("Found page type: " + pg)
+    if (place.text.contains("confirmDelete")) {
+        println("confirmDelete: " + "Found page type: " + pg)
+    }
+    //if (contribute) return
     if (pg) {
         PsiClass pageCls = PsiUtil.resolveClassInType(pg)
         if (!pageCls) return;
@@ -86,15 +156,7 @@ contributor(context()) {
         PsiField[] fields = pageCls.getFields()
 
         methods.each {
-
-            println "Adding method : " + it.returnType.canonicalText + " " +  it.name + "(" +
-                    it.parameters.collect { getParameterType(it) + " " + it.name  }.join(",") + ")"
-            method name: it.name,
-                    type: it.returnType.canonicalText,
-                    params: it.parameters.collectEntries {[it.name, getParameterType(it)]},
-                    containingClass: pageCls.qualName,
-                    bindsTo: it,
-                    doc: "DocTest", docUrl: "http://google.com", isStatic: false
+            method getFakeMethodParams(it, pageCls, null)
         }
 
         getGebPageContent(pageCls).each {
