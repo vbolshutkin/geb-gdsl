@@ -132,7 +132,7 @@ contributor(context()) {
     }
 
     // XXX passing superclass as ctype to context did not work
-    if (psiClass?.superClass?.qualName == "geb.junit4.GebReportingTest" || place.text.contains("confirmDelete")) {
+    if (psiClass?.superClass?.qualName == "geb.junit4.GebReportingTest" || psiClass?.superClass?.qualName == "geb.spock.GebSpec") {
         //println "Found test"
         contribute = true
     }
