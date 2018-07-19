@@ -10,6 +10,7 @@ import com.intellij.psi.*
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.*
 import org.jetbrains.plugins.groovy.lang.psi.api.statements.expressions.GrCommandArgumentList
+import org.jetbrains.plugins.groovy.lang.psi.impl.statements.arguments.GrArgumentListImpl
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.GrReferenceExpressionImpl
 import org.jetbrains.plugins.groovy.lang.psi.impl.statements.expressions.path.GrMethodCallExpressionImpl
 import org.jetbrains.plugins.groovy.lang.psi.util.GroovyPropertyUtils
@@ -26,12 +27,12 @@ synchronized def getLastLeaf(place) {
     lastChild
 }
 
-synchronized PsiType getPreviousPage(place) {
+synchronized PsiClass getPreviousPage(PsiElement place, PsiClass basePage, PsiElement stopElement) {
 
     def prev = place
     for (int i = 0; i < 200; i++) {
         prev = getPreviousElement(prev)
-        if (!prev) return null;
+        if (!prev || prev == stopElement) return basePage
 
         PsiReference reference = prev.getReference()
         if (reference != null) {
@@ -44,7 +45,7 @@ synchronized PsiType getPreviousPage(place) {
                         && ["to", "at", "page"].contains(method.name)) {
                     PsiType  pageType = prev.parent.nominalType
                     println "Found Method to/at/page. pageType " + pageType
-                    return pageType
+                    return PsiUtil.resolveClassInType(pageType)
                 }
 
 
@@ -53,11 +54,13 @@ synchronized PsiType getPreviousPage(place) {
     }
 }
 
-synchronized Collection<PsiElement> getGebPageContent(PsiClass pageCls) {
+synchronized Collection<GrMethodCallExpressionImpl> getGebPageContent(PsiClass pageCls) {
     PsiField content = pageCls.findFieldByName("content", true)
     if (!content) return []
 
     content.initializer.navigationElement.children
+            .findAll { it instanceof GrMethodCallExpressionImpl }
+            .collect { (GrMethodCallExpressionImpl)it }
 }
 
 synchronized String substituteTypeNames(String fqn, Map<String, String> substituteTypes) {
@@ -89,10 +92,69 @@ synchronized Map getFakeMethodParams(PsiMethod it, PsiClass cls, String[] argume
         ]
 }
 
-contributor(context()) {
+boolean isSubPsiClass(PsiClass candidate, String superclass) {
+    // TODO check whole hierarchy
+    candidate?.superClass?.qualifiedName == superclass
+}
+
+def <T> T safe(Closure<T> closure) {
+    try {
+        return closure.call()
+    } catch(Exception e) {
+        println e.getMessage()
+        return null
+    }
+}
+
+contributor(context(filetypes: ["groovy"])) {
 
     // XXX without this line the whole contributor stops working
     String type = psiType
+
+    PsiClass basePage = null
+
+    if (isSubPsiClass(psiClass,"geb.Page")) {
+
+        basePage = psiClass
+
+        // TODO check if we are in Page content definition block
+        getGebPageContent(psiClass).each {
+
+            String contentName = it.invokedExpression?.text
+
+            method name: contentName,
+                    type: Object.name,
+                    params: [
+                            options: [
+                                    parameter(name:'required', type:Boolean.name, doc:'http://www.gebish.org/manual/current/#code-required-code'),
+                                    parameter(name:'min', type:Integer.name, doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
+                                    parameter(name:'max', type:Integer.name, doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
+                                    parameter(name:'times', type:Integer.name, doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
+                                    parameter(name:'cache', type:Boolean.name, doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
+                                    parameter(name:'to', type:"java.lang.Class", doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
+                                    parameter(name:'wait', type:Boolean.name, doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
+                                    parameter(name:'toWait', type:Boolean.name, doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
+                                    parameter(name:'page', type:"java.lang.Class", doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
+
+
+                            ],
+                            closure: Closure.name
+                    ]
+
+            // options are optional
+            method name: contentName,
+                    type: Object.name,
+                    params: [
+                            closure: Closure.name
+                    ]
+        }
+
+    }
+
+
+
+
+
 
     def project = place.manager.project
     def jpf = JavaPsiFacade.getInstance(project)
@@ -100,17 +162,49 @@ contributor(context()) {
 
     boolean contribute = false
 
-    if (psiType.toString().contains("Closure")) {
+    def withFrameCall = enclosingCall("withFrame")
 
-        def methodCall = PsiTreeUtil.getParentOfType(place, GrMethodCallExpressionImpl)
-        while (methodCall && methodCall.invokedExpression?.text != "withFrame") {
-            methodCall = PsiTreeUtil.getParentOfType(methodCall, GrMethodCallExpressionImpl)
+
+    if (place.text.contains("page")) {
+        println "==================\n${place.text}\n${psiClass.name}\n=================="
+    }
+
+    if (withFrameCall) {
+        println "Found withFrame block for " + place.text
+
+        contribute = true
+
+        // resolve Page given in content template options and set it to basePage
+        def argList = PsiTreeUtil.getChildOfType(withFrameCall, GrArgumentListImpl)
+//        println "arg0: " + argList.allArguments[0].class +
+//                " " + argList.allArguments[0].reference
+        if (argList.allArguments[0].reference) {
+            GrMethodCallExpressionImpl contentItem =
+                    getGebPageContent(psiClass).find { it.invokedExpression.text == argList.allArguments[0].reference.canonicalText}
+            //println "found content item ${argList.allArguments[0].reference.canonicalText} -> ${contentItem} in PsiClass ${psiClass.name}"
+            if (contentItem) {
+                def contentArgList = PsiTreeUtil.getChildOfType(contentItem, GrArgumentListImpl)
+                //println "content args text:" + contentArgList.text
+                def pageExpr = contentArgList.namedArguments.find { it.labelName == "page" }.expression
+                if (pageExpr.reference) {
+                    def pageCls = pageExpr.reference.resolve()
+                    if (pageCls instanceof PsiClass && isSubPsiClass(psiClass,"geb.Page")) {
+                        println "Geb page found for withFrame call: ${pageCls.qualifiedName}"
+                        basePage = pageCls
+                    }
+                }
+
+            }
         }
 
-        if (methodCall && "withFrame" == methodCall.invokedExpression.text) {
-            println "Found withFrame block for " + place.text
-            contribute = true
 
+
+        // TODO better check we are in concrete closure of withFrame, not an arbitrary one
+        if (psiClass.qualifiedName == Closure.name) {
+
+            println "Now we are in Closure at withFrame call"
+
+            // add methods from geb.Browser class
             if (place instanceof GrReferenceExpressionImpl) {
                 println place.referenceName
                 // XXX hardcode: look for to/at/page methods that do have command arguments
@@ -132,7 +226,7 @@ contributor(context()) {
     }
 
     // XXX passing superclass as ctype to context did not work
-    if (psiClass?.superClass?.qualName == "geb.junit4.GebReportingTest" || psiClass?.superClass?.qualName == "geb.spock.GebSpec") {
+    if (isSubPsiClass(psiClass,"geb.junit4.GebReportingTest") || isSubPsiClass(psiClass,"geb.spock.GebSpec")) {
         //println "Found test"
         contribute = true
     }
@@ -141,35 +235,30 @@ contributor(context()) {
         return
     }
 
+    def stopElement = withFrameCall
+    if (!stopElement) method = safe { enclosingMethod() }
+
+
     // contribute Page members after switching (using to/at/page)
-    PsiType pg = getPreviousPage(place)
-    if (place.text.contains("confirmDelete")) {
-        println("confirmDelete: " + "Found page type: " + pg)
-    }
+    PsiClass pageCls = getPreviousPage(place, basePage, stopElement)
     //if (contribute) return
-    if (pg) {
-        PsiClass pageCls = PsiUtil.resolveClassInType(pg)
-        if (!pageCls) return;
+    if (pageCls) {
         println("Found page class: " + pageCls.qualName)
 
+        // existing methods usually have some more verbose toString
         PsiMethod[] methods = pageCls.getMethods().findAll { it.toString() == "Method"}
-        PsiField[] fields = pageCls.getFields()
-
         methods.each {
             method getFakeMethodParams(it, pageCls, null)
         }
 
         getGebPageContent(pageCls).each {
 
-            // XXX (it instanceof PsiMethodCallExpression) did not work
-            if (!(it instanceof GrMethodCallExpressionImpl)) {
-                // syntax error in Geb page or something changed in PSI model
-                return
-            }
+            if (!it.closureArguments) return
 
-            String contentName = it.invokedExpression.text
-            String contentType = it.closureArguments[0].returnType.className
+            String contentName = it.invokedExpression?.text
+            String contentType = it.closureArguments[0]?.returnType?.canonicalText
 
+            if (!contentName || !contentType) return
 
             println "Adding read-only property: " +  contentType + " " + contentName
             method name: GroovyPropertyUtils.getGetterNameNonBoolean(contentName),
