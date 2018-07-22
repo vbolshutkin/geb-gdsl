@@ -31,6 +31,14 @@ class FirstPage extends Page {
         }
     }
 
+    void testBrowserDrive() {
+        browser.drive {
+            page SecondPage
+            println testSecondContent
+            testSecondMethod()
+        }
+    }
+
 }
 
 class SecondPage extends Page {

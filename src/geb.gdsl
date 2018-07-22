@@ -226,7 +226,8 @@ contributor(context(filetypes: ["groovy"])) {
     }
 
     // XXX passing superclass as ctype to context did not work
-    if (isSubPsiClass(psiClass,"geb.junit4.GebReportingTest") || isSubPsiClass(psiClass,"geb.spock.GebSpec")) {
+    if (isSubPsiClass(psiClass,"geb.junit4.GebReportingTest") || isSubPsiClass(psiClass,"geb.spock.GebSpec")
+            || psiClass.qualifiedName == "geb.Browser") {
         //println "Found test"
         contribute = true
     }
@@ -268,4 +269,130 @@ contributor(context(filetypes: ["groovy"])) {
                     doc: "DocTest", docUrl: "http://google.com", isStatic: false
         }
     }
+}
+
+// contribute GebConfig
+
+contributor([context(pathRegexp: "GebConfig.groovy"), context(ctype: "GebConfig")]) {
+
+    property name: "driver",
+            type: "String",
+            doc: "DocTest",
+            docUrl: "http://google.com"
+
+    method name: GroovyPropertyUtils.getSetterName("driver"),
+            type: "void",
+            params: [driver: "groovy.lang.Closure<org.openqa.selenium.WebDriver>"],
+            doc: "DocTest",
+            docUrl: "http://google.com"
+
+    property name: "innerNavigatorFactory",
+            type: "groovy.lang.Closure",
+            doc: "DocTest",
+            docUrl: "http://google.com"
+
+    property name: "cacheDriver",
+            type: "boolean",
+            doc: "DocTest",
+            docUrl: "http://google.com"
+
+    property name: "cacheDriverPerThread",
+            type: "boolean",
+            doc: "DocTest",
+            docUrl: "http://google.com"
+
+    property name: "quitCachedDriverOnShutdown",
+            type: "boolean",
+            doc: "DocTest",
+            docUrl: "http://google.com"
+
+    property name: "baseUrl",
+            type: "String",
+            doc: "DocTest",
+            docUrl: "http://google.com"
+
+    property name: "atCheckWaiting",
+            type: "boolean",
+            doc: "DocTest",
+            docUrl: "http://google.com"
+
+    property name: "baseNavigatorWaiting",
+            type: "boolean",
+            doc: "DocTest",
+            docUrl: "http://google.com"
+
+
+
+    property name: "unexpectedPages",
+            type: "java.util.List<java.lang.Class>",
+            doc: "DocTest",
+            docUrl: "http://google.com"
+
+    property name: "reporter",
+            type: "geb.report.Reporter",
+            doc: "DocTest",
+            docUrl: "http://google.com"
+
+    property name: "reportsDir",
+            type: "String",
+            doc: "DocTest",
+            docUrl: "http://google.com"
+
+    method name: GroovyPropertyUtils.getSetterName("reportsDir"),
+            type: "void",
+            params: [driver: "java.io.File"],
+            doc: "DocTest",
+            docUrl: "http://google.com"
+
+    property name: "autoClearCookies",
+            type: "boolean",
+            doc: "DocTest",
+            docUrl: "http://google.com"
+
+    method name: "waiting",
+           type: "void",
+           params: [closure: "groovy.lang.Closure"]
+
+    if (enclosingCall("waiting")) {
+
+        property name: "timeout",
+                type: "int",
+                doc: "DocTest",
+                docUrl: "http://google.com"
+
+        property name: "retryInterval",
+                type: "double",
+                doc: "DocTest",
+                docUrl: "http://google.com"
+
+        property name: "includeCauseInMessage",
+                type: "boolean",
+                doc: "DocTest",
+                docUrl: "http://google.com"
+
+        method name: "presets",
+                type: "void",
+                params: [closure: "groovy.lang.Closure"]
+
+    }
+
+    if (enclosingCall("presets")) {
+
+        method name: place.text,
+                type: "void",
+                params: [closure: "groovy.lang.Closure"]
+    }
+
+
+    method name: "environments",
+            type: "void",
+            params: [closure: "groovy.lang.Closure"]
+
+    if (enclosingCall("environments")) {
+
+        method name: place.text,
+                type: "void",
+                params: [closure: "groovy.lang.Closure"]
+    }
+
 }
