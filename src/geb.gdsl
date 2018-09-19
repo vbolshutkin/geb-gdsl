@@ -33,6 +33,7 @@ synchronized PsiClass getPreviousPage(PsiElement place, PsiClass basePage, PsiEl
     for (int i = 0; i < 200; i++) {
         prev = getPreviousElement(prev)
         if (!prev || prev == stopElement) return basePage
+        if (prev == stopElement) return basePage
 
         PsiReference reference = prev.getReference()
         if (reference != null) {
@@ -99,9 +100,10 @@ boolean isSubPsiClass(PsiClass candidate, String superclass) {
 
 def <T> T safe(Closure<T> closure) {
     try {
+        if (!closure) println "Error: closure is null!"
         return closure.call()
     } catch(Exception e) {
-        println e.getMessage()
+        println "Error: " + e.getMessage()
         return null
     }
 }
@@ -206,13 +208,13 @@ contributor(context(filetypes: ["groovy"])) {
 
             // add methods from geb.Browser class
             if (place instanceof GrReferenceExpressionImpl) {
-                println place.referenceName
+                println "GrReferenceExpressionImpl referenceName: " + place.referenceName
                 // XXX hardcode: look for to/at/page methods that do have command arguments
                 def arguments =  PsiTreeUtil.getNextSiblingOfType(place, GrCommandArgumentList)
                 def resolvedType = arguments?.firstChild?.reference?.resolve()
                 if (resolvedType instanceof PsiClass) {
                     String typeName = resolvedType.qualifiedName
-                    println typeName + " " + place.referenceName
+                    println "resolved class " + typeName + " " + place.referenceName
                     def methods = browserClass.findMethodsByName(place.referenceName, false)
 
                     methods.each {
@@ -226,9 +228,10 @@ contributor(context(filetypes: ["groovy"])) {
     }
 
     // XXX passing superclass as ctype to context did not work
-    if (isSubPsiClass(psiClass,"geb.junit4.GebReportingTest") || isSubPsiClass(psiClass,"geb.spock.GebSpec")
+    if (       isSubPsiClass(psiClass,"geb.junit3.GebTest") || isSubPsiClass(psiClass,"geb.junit3.GebReportingTest")
+            || isSubPsiClass(psiClass,"geb.junit4.GebTest") || isSubPsiClass(psiClass,"geb.junit4.GebReportingTest")
+            || isSubPsiClass(psiClass,"geb.spock.GebSpec") || isSubPsiClass(psiClass,"geb.spock.GebReportingSpec")
             || psiClass.qualifiedName == "geb.Browser") {
-        //println "Found test"
         contribute = true
     }
     //contribute = false
@@ -237,8 +240,11 @@ contributor(context(filetypes: ["groovy"])) {
     }
 
     def stopElement = withFrameCall
-    if (!stopElement) method = safe { enclosingMethod() }
+    // XXX enclosingMethod doesn't work and always throws NPE (DslPointcut.java:216)
+    //if (!stopElement) stopElement = safe { println "safe closure called"; enclosingMethod() }
+    if (!stopElement) stopElement = PsiTreeUtil.getParentOfType(place, PsiMethod)
 
+    println "stopElement: " + stopElement
 
     // contribute Page members after switching (using to/at/page)
     PsiClass pageCls = getPreviousPage(place, basePage, stopElement)
