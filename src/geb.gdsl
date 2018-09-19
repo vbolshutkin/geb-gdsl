@@ -130,13 +130,14 @@ contributor(context(filetypes: ["groovy"])) {
                             options: [
                                     parameter(name:'required', type:Boolean.name, doc:'http://www.gebish.org/manual/current/#code-required-code'),
                                     parameter(name:'min', type:Integer.name, doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
-                                    parameter(name:'max', type:Integer.name, doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
-                                    parameter(name:'times', type:Integer.name, doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
-                                    parameter(name:'cache', type:Boolean.name, doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
-                                    parameter(name:'to', type:"java.lang.Class", doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
-                                    parameter(name:'wait', type:Boolean.name, doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
-                                    parameter(name:'toWait', type:Boolean.name, doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
-                                    parameter(name:'page', type:"java.lang.Class", doc:'http://www.gebish.org/manual/current/#content-dsl-min'),
+                                    parameter(name:'max', type:Integer.name, doc:'http://www.gebish.org/manual/current/#content-dsl-max'),
+                                    parameter(name:'times', type:Integer.name, doc:'http://www.gebish.org/manual/current/#content-dsl-times'),
+                                    parameter(name:'cache', type:Boolean.name, doc:'http://www.gebish.org/manual/current/#content-dsl-cache'),
+                                    parameter(name:'to', type:"java.lang.Class", doc:'http://www.gebish.org/manual/current/#content-dsl-to'),
+                                    parameter(name:'wait', type:Boolean.name, doc:'http://www.gebish.org/manual/current/#content-dsl-wait'),
+                                    parameter(name:'waitCondition', type:Closure.name, doc:'http://www.gebish.org/manual/current/#content-dsl-wait-condition'),
+                                    parameter(name:'toWait', type:Boolean.name, doc:'http://www.gebish.org/manual/current/#content-dsl-to-wait'),
+                                    parameter(name:'page', type:"java.lang.Class", doc:'http://www.gebish.org/manual/current/#content-dsl-page'),
 
 
                             ],
