@@ -94,8 +94,12 @@ synchronized Map getFakeMethodParams(PsiMethod it, PsiClass cls, String[] argume
 }
 
 boolean isSubPsiClass(PsiClass candidate, String superclass) {
-    // TODO check whole hierarchy
-    candidate?.superClass?.qualifiedName == superclass
+    PsiClass sc = candidate?.superClass
+    while (sc) {
+        if (sc.qualifiedName == superclass) return true
+        sc = sc.superClass
+    }
+    return false
 }
 
 def <T> T safe(Closure<T> closure) {
@@ -114,6 +118,8 @@ contributor(context(filetypes: ["groovy"])) {
     String type = psiType
 
     PsiClass basePage = null
+
+    if (!psiClass) return
 
     if (isSubPsiClass(psiClass,"geb.Page")) {
 
@@ -188,8 +194,8 @@ contributor(context(filetypes: ["groovy"])) {
             if (contentItem) {
                 def contentArgList = PsiTreeUtil.getChildOfType(contentItem, GrArgumentListImpl)
                 //println "content args text:" + contentArgList.text
-                def pageExpr = contentArgList.namedArguments.find { it.labelName == "page" }.expression
-                if (pageExpr.reference) {
+                def pageExpr = contentArgList.namedArguments.find { it.labelName == "page" } ?.expression
+                if (pageExpr?.reference) {
                     def pageCls = pageExpr.reference.resolve()
                     if (pageCls instanceof PsiClass && isSubPsiClass(psiClass,"geb.Page")) {
                         println "Geb page found for withFrame call: ${pageCls.qualifiedName}"
